@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AgriHub — Smart Farming Dashboard (3D Offline)</title>
+<meta name="description" content="AgriHub single-file smart farming dashboard - offline single-file background, 3D look, dashboard, fields, marketplace, tasks, resources, contact." />
+
+<!--
+  AgriHub — Smart Farming Dashboard (single file, offline background)
+  - Full app in one HTML file (no external assets)
+  - Embedded background via data-URI SVG
+  - Canvas charts, localStorage persistence, contact form saving messages
+  - 3D elevated card style, responsive layout
+  - Keep file readable and commented
+-->
+
+<style>
+/* ===========================
+   AgriHub Styles
+   - variables, base, layout, components, utilities
+   =========================== */
+
+/* ---------- VARIABLES ---------- */
+:root{
+  --bg-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1920' height='1080' viewBox='0 0 1920 1080'><defs><linearGradient id='g1' x1='0' x2='0' y1='0' y2='1'><stop offset='0' stop-color='%23f8fff5'/><stop offset='1' stop-color='%23e8f8ea'/></linearGradient><linearGradient id='g2' x1='0' x2='1' y1='0' y2='1'><stop offset='0' stop-color='%238fd087'/><stop offset='1' stop-color='%230b6b4a'/></linearGradient></defs><rect width='100%25' height='100%25' fill='url(%23g1)'/><g transform='translate(0,420)'><path d='M0,200 C240,100 480,250 720,200 C960,150 1200,300 1440,200 C1680,100 1920,250 1920,250 L1920,660 L0,660 Z' fill='url(%23g2)' opacity='0.95'/><path d='M0,260 C240,180 480,340 720,300 C960,260 1200,380 1440,320 C1680,260 1920,380 1920,380 L1920,720 L0,720 Z' fill='%2380c57f' opacity='0.82'/></g><g transform='translate(1200,80)'><circle cx='60' cy='60' r='48' fill='%23ffd36b' opacity='0.98'/></g></svg>");
+  --space: 16px;
+  --radius: 12px;
+  --glass: rgba(255,255,255,0.75);
+  --muted: #607060;
+  --accent: #0b6b4a;
+  --accent-2: #8fd087;
+  --card: #ffffff;
+  --bg: #f7fbf7;
+  --text: #062017;
+  --shadow-deep: 0 30px 60px rgba(3,20,12,0.18);
+  --shadow-soft: 0 10px 30px rgba(3,20,12,0.08);
+  --transition: 240ms cubic-bezier(.2,.9,.25,1);
+  --max-width: 1180px;
+}
+
+/* ---------- BASE ---------- */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;font-size:14px;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+button{font:inherit;cursor:pointer}
+
+/* ---------- BACKGROUND (single image behind layout) ---------- */
+.background-layer{
+  position:fixed;inset:0;z-index:0;
+  background-image: linear-gradient(rgba(4,14,8,0.12), rgba(255,255,255,0.02)), var(--bg-url);
+  background-size:cover;background-position:center;
+  filter: saturate(0.96) contrast(1.02) blur(2px) brightness(0.95);
+  transform: translateZ(0);
+}
+.background-layer::after{
+  content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.01));
+}
+
+/* ---------- LAYOUT ---------- */
+.app { position:relative;z-index:3;min-height:100vh;display:flex;align-items:stretch;padding-left:260px; transition: padding-left var(--transition); }
+@media (max-width:900px){ .app{padding-left:0} }
+
+/* header */
+.header { position:fixed;left:260px;right:0;top:0;height:64px;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;background: linear-gradient(180deg, rgba(255,255,255,0.64), rgba(255,255,255,0.52));backdrop-filter: blur(6px);border-bottom-left-radius:12px;border-bottom-right-radius:12px;box-shadow: var(--shadow-soft);z-index:40; }
+@media (max-width:900px){ .header{left:0} }
+
+/* sidebar */
+.sidebar { position:fixed;left:0;top:0;bottom:0;width:260px;padding:22px;display:flex;flex-direction:column;gap:18px;background: linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.48));backdrop-filter: blur(8px);box-shadow: var(--shadow-deep);z-index:41;border-right: 1px solid rgba(6,20,12,0.04); }
+.brand { display:flex;align-items:center;gap:12px;}
+.logo { width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:18px;box-shadow:0 10px 30px rgba(10,90,60,0.12) }
+.app-title {font-weight:800;font-size:16px}
+.app-sub {font-size:12px;color:var(--muted)}
+.nav {display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.nav a { display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;color:var(--text);text-decoration:none;font-weight:700; }
+.nav a:hover{background:linear-gradient(90deg, rgba(11,107,74,0.06), rgba(143,192,138,0.04))}
+.nav a.active{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:white;box-shadow:0 12px 30px rgba(11,107,74,0.12)}
+.hamburger {display:none;background:transparent;border:0;font-size:20px}
+@media (max-width:900px){ .sidebar{position:fixed;left:-320px;transition:left 300ms ease;top:0} .sidebar.open{left:0} .hamburger{display:inline-block} }
+
+/* main content area */
+.content { margin-top:84px; margin-bottom:40px; width:100%; display:block; padding:22px 28px; }
+.container { max-width: var(--max-width); margin:0 auto; display:grid;grid-template-columns:1fr 360px;gap:22px; }
+@media (max-width:1024px){ .container{grid-template-columns:1fr} }
+
+/* cards */
+.card { background:var(--card); border-radius:12px; padding:14px; box-shadow:var(--shadow-soft); border:1px solid rgba(6,20,12,0.03) }
+.card-3d { box-shadow: 0 22px 60px rgba(3,20,12,0.18); transform: translateZ(0); transition: transform var(--transition), box-shadow var(--transition) }
+.card-3d:hover{ transform: translateY(-6px); box-shadow: 0 36px 70px rgba(3,20,12,0.24) }
+
+/* small components */
+.summary { display:flex; gap:12px; margin-bottom:12px }
+.scard { flex:1; padding:14px; border-radius:12px; background:linear-gradient(180deg,#fff,#fbfff8); display:flex;flex-direction:column; gap:8px; }
+.sval{font-weight:900;font-size:22px}
+.smuted{font-size:12px;color:var(--muted)}
+.table { width:100%; border-collapse:collapse; font-size:13px; }
+.table th, .table td { text-align:left;padding:8px;border-bottom:1px dashed rgba(6,20,12,0.04) }
+.table thead th { font-weight:800;font-size:13px }
+.fields-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+.progress { width:100%; background:#f1f8f2;border-radius:8px;height:12px; overflow:hidden }
+.progress > i { display:block;height:100%; background:linear-gradient(90deg,var(--accent-2),var(--accent)); }
+.filters { display:flex;gap:10px;align-items:center; margin-bottom:12px }
+.tasks-list { display:flex;flex-direction:column;gap:8px }
+.task { display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;background:linear-gradient(180deg,#fff,#fbfff8) }
+.calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:8px }
+.calendar .day { border-radius:8px;padding:8px;background:linear-gradient(180deg,#fff,#fbfff8);min-height:80px; font-size:13px; position:relative }
+.calendar .day .date { position:absolute;right:8px;top:6px;font-weight:800;color:var(--muted);font-size:12px }
+.calendar .day.has { box-shadow: inset 0 -4px 0 rgba(11,107,74,0.06) }
+.resources-list { display:flex;flex-direction:column;gap:10px }
+.article { display:flex;gap:12px; align-items:flex-start }
+.modal-back { position:fixed; inset:0; background:rgba(6,10,6,0.48); display:flex;align-items:center;justify-content:center;z-index:2000 }
+.modal { width:720px; max-width:94%; max-height:88vh; overflow:auto; border-radius:12px; padding:16px; background:var(--card); box-shadow:var(--shadow-deep) }
+.controls { display:flex; gap:8px; align-items:center }
+.btn { padding:8px 12px; border-radius:8px; border:0; background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:white; font-weight:700 }
+.btn.ghost { background:transparent; border:1px solid rgba(11,107,74,0.08); color:var(--text) }
+.skeleton { background:linear-gradient(90deg,#f0f5f0,#eef7ef,#f0f5f0); background-size:200% 100%; animation: shimmer 1.2s linear infinite; border-radius:8px }
+@keyframes shimmer{ to{background-position:-200% 0} }
+.center { text-align:center }
+.small { font-size:13px;color:var(--muted) }
+.footer { margin-top:20px;padding:10px;text-align:center;color:var(--muted) }
+.input { padding:8px;border-radius:8px;border:1px solid #e9f6ef; background:white }
+.label { font-weight:700;font-size:12px;color:var(--muted);display:block;margin-bottom:6px }
+:focus{ outline: 3px solid rgba(11,107,74,0.14); outline-offset:2px }
+@media (max-width:640px){ .summary{flex-direction:column} .header{padding:10px} .container{padding:0 8px} .section{padding:14px} }
+</style>
+</head>
+<body>
+  <!-- Background -->
+  <div class="background-layer" aria-hidden="true"></div>
+
+  <!-- App shell -->
+  <div class="app" role="application" aria-label="AgriHub Smart Farming Dashboard">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" role="navigation" aria-label="Main sidebar">
+      <div class="brand">
+        <div class="logo">AH</div>
+        <div>
+          <div class="app-title">AgriHub</div>
+          <div class="app-sub">Smart Farming Dashboard</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Primary">
+        <a href="#/dashboard" data-route="/dashboard" class="nav-link" id="link-dashboard" tabindex="0">🏠 Dashboard</a>
+        <a href="#/fields" data-route="/fields" class="nav-link" id="link-fields" tabindex="0">🌾 Fields / Plots</a>
+        <a href="#/market" data-route="/market" class="nav-link" id="link-market" tabindex="0">🛒 Crop Marketplace</a>
+        <a href="#/tasks" data-route="/tasks" class="nav-link" id="link-tasks" tabindex="0">🗓️ Tasks & Calendar</a>
+        <a href="#/resources" data-route="/resources" class="nav-link" id="link-resources" tabindex="0">📚 Resources</a>
+        <a href="#/contact" data-route="/contact" class="nav-link" id="link-contact" tabindex="0">✉️ Contact & Profile</a>
+      </nav>
+
+      <div style="margin-top:auto">
+        <div class="small">Demo controls</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn ghost" id="btn-import" title="Import seed">Import</button>
+          <button class="btn ghost" id="btn-reset" title="Reset demo">Reset</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Header -->
+    <header class="header" role="banner" aria-label="Top header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="hamburger" id="hamburger" aria-label="Open menu" title="Open menu">☰</button>
+        <div><strong id="page-title">Dashboard</strong></div>
+        <div class="small" style="margin-left:12px;color:var(--muted)">AgriHub • 3D Edition</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="small">Weather</div>
+        <div class="card" style="padding:8px 12px;display:flex;gap:8px;align-items:center">
+          <div id="mini-weather-icon" aria-hidden="true">☀️</div>
+          <div style="text-align:right">
+            <div id="mini-weather-temp" style="font-weight:800">27°C</div>
+            <div class="small" id="mini-weather-desc">Sunny</div>
+          </div>
+        </div>
+        <div style="width:12px"></div>
+        <div><button class="btn ghost" id="btn-export">Export Tasks</button></div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="content" role="main" id="main">
+      <div id="view-root" class="view-root" aria-live="polite"></div>
+      <div class="footer" aria-hidden="true">AgriHub demo • offline background • local data only</div>
+    </main>
+
+  </div>
+
+  <!-- Modal & toast -->
+  <div id="modal-root" aria-hidden="true"></div>
+  <div id="toast" role="status" aria-live="polite" style="position:fixed;right:20px;bottom:20px;z-index:3000;display:none">
+    <div class="card" style="padding:12px 16px;border-radius:10px;box-shadow:var(--shadow-deep);">Message sent ✓</div>
+  </div>
+
+<script>
+/* ===========================
+   AgriHub JS (clean, single-file)
+   - deterministic seed generator
+   - sample data
+   - hash-router
+   - renderers for sections
+   - canvas charts
+   - contact form: validate + save messages in localStorage + recent list
+   - all functions contained to avoid duplicate definitions/errors
+   =========================== */
+
+/* ---------- helpers ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from((r||document).querySelectorAll(s));
+const STORAGE_KEY = 'agrihub_offline_v1';
+
+/* deterministic RNG (seeded) */
+function makeRNG(seed=2025){
+  let s = seed >>> 0;
+  return function(){
+    s = (s ^ (s << 13)) >>> 0;
+    s = (s ^ (s >>> 17)) >>> 0;
+    s = (s ^ (s << 5)) >>> 0;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
+/* date helpers */
+function todayISO(){ return (new Date()).toISOString().slice(0,10); }
+function addDays(dateStr, n){ const d = new Date(dateStr); d.setDate(d.getDate() + n); return d.toISOString().slice(0,10); }
+function formatDateShort(iso){ const d = new Date(iso); return d.toLocaleString(); }
+
+/* sanitize small text outputs */
+function escapeHtml(s=''){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ---------- seed & state ---------- */
+function genSeries(n, rng, min, max){ const out=[]; for(let i=0;i<n;i++) out.push(Math.round((min + rng()*(max-min))*100)/100); return out; }
+function createSeedData(){
+  const rng = makeRNG(2025);
+  const fields = [
+    { id:'f1', name:'North Field', crop:'Rice', area: 2.4, lastIrrigated: addDays(todayISO(), -3), moistureHistory: genSeries(7, rng, 40, 85) },
+    { id:'f2', name:'East Orchard', crop:'Mango', area: 1.2, lastIrrigated: addDays(todayISO(), -12), moistureHistory: genSeries(7, rng, 25, 60) },
+    { id:'f3', name:'Greenhouse 1', crop:'Tomato', area: 0.6, lastIrrigated: addDays(todayISO(), -1), moistureHistory: genSeries(7, rng, 50, 92) },
+    { id:'f4', name:'South Field', crop:'Maize', area: 3.1, lastIrrigated: addDays(todayISO(), -7), moistureHistory: genSeries(7, rng, 30, 70) },
+    { id:'f5', name:'Herb Patch', crop:'Basil', area: 0.2, lastIrrigated: addDays(todayISO(), -2), moistureHistory: genSeries(7, rng, 45, 85) },
+    { id:'f6', name:'West Field', crop:'Wheat', area: 4.0, lastIrrigated: addDays(todayISO(), -9), moistureHistory: genSeries(7, rng, 22, 64) },
+  ];
+
+  const market = [
+    { id:'p1', name:'Organic Rice (50kg)', category:'Grain', price: 2400, seller:'Local Coop', description:'High-quality paddy, locally harvested.' },
+    { id:'p2', name:'Tomato (per kg)', category:'Vegetable', price: 18, seller:'GreenHouse Co.', description:'Fresh greenhouse tomatoes.' },
+    { id:'p3', name:'Maize Seed (kg)', category:'Seed', price: 80, seller:'SeedMart', description:'Certified hybrid maize seeds.' },
+    { id:'p4', name:'Mango (box)', category:'Fruit', price: 1200, seller:'FruitHub', description:'Ripe mangoes, seasonal.' },
+    { id:'p5', name:'Organic Basil (bundle)', category:'Herb', price: 60, seller:'HerbGrow', description:'Fresh fragrant basil.' },
+    { id:'p6', name:'Wheat Grain (50kg)', category:'Grain', price: 1900, seller:'GrainUnion', description:'Cleaned & packed wheat.' },
+    { id:'p7', name:'Compost (50L)', category:'Soil', price: 250, seller:'SoilCare', description:'Nutrient-rich compost for fields.' },
+    { id:'p8', name:'Fertilizer NPK (kg)', category:'Input', price: 40, seller:'AgriSupply', description:'Balanced NPK for crops.' }
+  ];
+
+  const sensors = [
+    { id:'s1', field:'North Field', moisture: 68, temp: 27.2, humidity: 72, ts: new Date().toISOString() },
+    { id:'s2', field:'Greenhouse 1', moisture: 83, temp: 29.1, humidity: 78, ts: new Date().toISOString() },
+    { id:'s3', field:'South Field', moisture: 45, temp: 25.8, humidity: 60, ts: new Date().toISOString() }
+  ];
+
+  const articles = [
+    { id:'a1', title:'Drip Irrigation Best Practices', summary:'How drip irrigation saves water and increases yields.', content:'Drip irrigation delivers water directly to the root zone...' },
+    { id:'a2', title:'Crop Rotation for Soil Health', summary:'Rotate crops to manage pests and replenish nutrients.', content:'Crop rotation is an age-old technique...' },
+    { id:'a3', title:'Nutrient Management & Fertilizers', summary:'Understand N-P-K and balanced feeding.', content:'Plants require nitrogen (N), phosphorus (P) and potassium (K)...' },
+    { id:'a4', title:'Integrated Pest Management', summary:'Sustainable strategies to manage pests.', content:'IPM combines biological, cultural, and chemical practices...' }
+  ];
+
+  const tasks = [
+    { id:'t1', text:'Inspect drip lines', date: addDays(todayISO(), 1) },
+    { id:'t2', text:'Fertilizer application — North Field', date: addDays(todayISO(), 5) }
+  ];
+
+  const profile = { owner:'Alex Farmer', farmName:'Sunrise Farm', location:'Demo Region', areaHa: 12.5, phone:'+91 99999 99999' };
+
+  
+  const yieldSeries = genSeries(12, rng, 3.2, 8.6).map(v => Number(v.toFixed(2)));
+
+  const favorites = [];
+  const messages = [];
+
+  return { fields, market, sensors, articles, tasks, profile, yieldSeries, favorites, messages };
+}
+
+/* ---------- state handling ---------- */
+let state = null;
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  } catch(e){ console.warn('load fail', e); }
+  return null;
+}
+function saveState(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){ console.warn('save fail', e); }
+}
+state = loadState() || createSeedData();
+saveState();
+
+/* ---------- router ---------- */
+const routes = {
+  '/dashboard': renderDashboard,
+  '/fields': renderFields,
+  '/market': renderMarket,
+  '/tasks': renderTasks,
+  '/resources': renderResources,
+  '/contact': renderContact
+};
+function parseHash(){ const h = location.hash.replace(/^#/,'') || '/dashboard'; return h.startsWith('/') ? h : '/' + h; }
+function setActiveNav(route){ $$('.nav a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + route)); $('#page-title').textContent = route.replace('/','') ? (route.replace('/','').charAt(0).toUpperCase() + route.replace('/','').slice(1)) : 'Dashboard'; }
+function renderRoute(){ const path = parseHash(); setActiveNav(path); const fn = routes[path] || renderDashboard; const root = $('#view-root'); root.innerHTML = `<div style="max-width:var(--max-width);margin:0 auto"><div class="card skeleton" style="height:180px;margin-bottom:12px"></div><div style="display:grid;grid-template-columns:1fr 360px;gap:12px"><div class="card skeleton" style="height:220px"></div><div class="card skeleton" style="height:220px"></div></div></div>`; setTimeout(()=> fn(), 350 + Math.floor(Math.random()*180)); }
+window.addEventListener('hashchange', renderRoute);
+window.addEventListener('load', ()=> {
+  renderRoute();
+  $('#hamburger').addEventListener('click', ()=> document.querySelector('.sidebar').classList.toggle('open'));
+  $('#btn-reset').addEventListener('click', ()=> { if(confirm('Reset demo data?')){ localStorage.removeItem(STORAGE_KEY); state = createSeedData(); saveState(); renderRoute(); }});
+  $('#btn-import').addEventListener('click', ()=> { state = createSeedData(); saveState(); renderRoute(); alert('Demo data imported.'); });
+  $('#btn-export').addEventListener('click', ()=> exportTasksAsJSON());
+});
+
+/* ---------- Dashboard ---------- */
+function renderDashboard(){
+  const root = $('#view-root');
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="dashboard-heading">
+      <h2 id="dashboard-heading">Dashboard</h2>
+      <div class="summary" style="margin-top:12px">
+        <div class="scard card-3d"><div class="small">Total Fields</div><div class="sval">${state.fields.length}</div><div class="smuted">Total cultivated plots</div></div>
+        <div class="scard card-3d"><div class="small">Active Sensors</div><div class="sval">${state.sensors.length}</div><div class="smuted">Live-ish sensor count</div></div>
+        <div class="scard card-3d"><div class="small">Irrigation Status</div><div class="sval">${calcIrrigationStatus()}</div><div class="smuted">Fields needing irrigation</div></div>
+        <div class="scard card-3d"><div class="small">Monthly Yield (t)</div><div class="sval">${(state.yieldSeries.reduce((a,b)=>a+b,0)/12).toFixed(2)}</div><div class="smuted">Avg last 12 months</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;margin-top:14px">
+        <div class="card card-3d" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>Yield — last 12 months</strong><div class="small">Tonnes per month</div></div>
+            <div class="small">Units: t</div>
+          </div>
+          <canvas id="yield-chart" width="720" height="220" style="width:100%;height:220px;margin-top:12px;border-radius:8px;"></canvas>
+        </div>
+
+        <aside>
+          <div class="card card-3d">
+            <div style="display:flex;justify-content:space-between;align-items:center"><strong>Latest Sensors</strong></div>
+            <table class="table" style="margin-top:8px">
+              <thead><tr><th>Field</th><th>Moist</th><th>Temp</th><th>Hum</th><th>Time</th></tr></thead>
+              <tbody id="sensor-table-body"></tbody>
+            </table>
+          </div>
+
+          <div style="height:12px"></div>
+
+          <div class="card card-3d">
+            <strong>Quick Actions</strong>
+            <div style="height:10px"></div>
+            <div style="display:flex;gap:8px"><button class="btn" id="dash-add-task">Add Task</button><button class="btn ghost" id="dash-open-fields">Fields</button></div>
+          </div>
+        </aside>
+
+      </div>
+    </section>
+  `;
+
+  renderYieldChart('yield-chart', state.yieldSeries);
+
+  const tbody = $('#sensor-table-body'); tbody.innerHTML = '';
+  state.sensors.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(s.field)}</td><td>${s.moisture}%</td><td>${s.temp}°C</td><td>${s.humidity}%</td><td>${formatDateShort(s.ts)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  $('#dash-add-task').addEventListener('click', ()=> openAddTaskModal());
+  $('#dash-open-fields').addEventListener('click', ()=> navigateTo('/fields'));
+  setMiniWeather();
+}
+
+function calcIrrigationStatus(){
+  let need = 0;
+  state.fields.forEach(f => {
+    const last = f.moistureHistory[f.moistureHistory.length-1];
+    if(last < 45) need++;
+  });
+  return need + ' / ' + state.fields.length;
+}
+
+/* ---------- charts (canvas) ---------- */
+function renderYieldChart(canvasId, data){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const DPR = window.devicePixelRatio || 1;
+  const W = canvas.width, H = canvas.height;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const padding = 36;
+  const graphW = W - padding*2, graphH = H - padding*2;
+  const max = Math.max(...data) * 1.12;
+  const min = Math.min(...data) * 0.9;
+
+  ctx.strokeStyle = 'rgba(6,20,12,0.06)'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){ const y = padding + (graphH/4)*i; ctx.beginPath(); ctx.moveTo(padding,y); ctx.lineTo(padding+graphW,y); ctx.stroke(); }
+
+  const grad = ctx.createLinearGradient(0,padding,0,padding+graphH);
+  grad.addColorStop(0, 'rgba(139,207,138,0.28)'); grad.addColorStop(1, 'rgba(255,255,255,0.02)');
+
+  const stepX = graphW / (data.length - 1);
+  const points = data.map((v,i) => {
+    const x = padding + i*stepX;
+    const vy = (v - min) / (max - min || 1);
+    const y = padding + graphH - vy*graphH;
+    return {x,y,v};
+  });
+
+  ctx.beginPath();
+  points.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+  ctx.lineTo(padding+graphW,padding+graphH); ctx.lineTo(padding,padding+graphH); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(11,107,74,0.96)';
+  points.forEach((p,i) => i===0 ? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y));
+  ctx.stroke();
+
+  points.forEach(p => { ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.fillStyle = 'rgba(11,107,74,0.9)'; ctx.arc(p.x,p.y,2.4,0,Math.PI*2); ctx.fill(); });
+
+  ctx.fillStyle = 'rgba(6,20,12,0.7)'; ctx.font = '12px system-ui';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const now = new Date();
+  for(let i=0;i<data.length;i++){ const label = months[(now.getMonth()+i+1) % 12]; ctx.fillText(label, padding + i*stepX - 10, padding + graphH + 18); }
+  ctx.textAlign = 'right';
+  for(let i=0;i<=4;i++){ const val = (min + (max-min)*(1 - i/4)).toFixed(1); ctx.fillText(val, padding - 8, padding + (graphH/4)*i + 4); }
+
+  canvas.onmousemove = function(e){
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    let nearest = null; let dist = 9999;
+    points.forEach(p => { const d = Math.abs(p.x - x); if(d < dist){ dist = d; nearest = p; } });
+    if(nearest && dist < 24){
+      renderYieldChart(canvasId, data);
+      const ctx2 = canvas.getContext('2d'); ctx2.setTransform(DPR,0,0,DPR,0,0);
+      const tx = nearest.x + 8, ty = nearest.y - 28;
+      const txt = nearest.v + ' t';
+      ctx2.fillStyle = 'rgba(3,20,12,0.9)'; const w = ctx2.measureText(txt).width + 12; ctx2.fillRect(tx, ty - 6, w, 20);
+      ctx2.fillStyle = '#fff'; ctx2.fillText(txt, tx + 6, ty + 8);
+    }
+  };
+  canvas.onmouseleave = function(){ renderYieldChart(canvasId, data); };
+}
+
+/* ---------- Fields ---------- */
+function renderFields(){
+  const root = $('#view-root');
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="fields-heading">
+      <h2 id="fields-heading">Fields / Plots</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+        <div class="small">Manage your fields — view details and moisture history</div>
+        <div class="controls">
+          <label class="small" for="field-filter">Filter:</label>
+          <select id="field-filter" class="input"><option value="">All Crops</option></select>
+        </div>
+      </div>
+      <div style="height:12px"></div>
+      <div class="fields-grid" id="fields-grid"></div>
+    </section>
+  `;
+  const crops = Array.from(new Set(state.fields.map(f=>f.crop)));
+  const filter = $('#field-filter');
+  crops.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; filter.appendChild(opt); });
+  filter.addEventListener('change', ()=> populateFieldsGrid(filter.value));
+  populateFieldsGrid('');
+}
+function populateFieldsGrid(cropFilter){
+  const grid = $('#fields-grid'); grid.innerHTML = '';
+  const list = state.fields.filter(f => !cropFilter || f.crop === cropFilter);
+  list.forEach(f => {
+    const lastMoist = f.moistureHistory[f.moistureHistory.length-1];
+    const percent = Math.max(0, Math.min(100, Math.round(lastMoist)));
+    const el = document.createElement('div'); el.className = 'card card-3d';
+    el.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center">
+        <div style="width:92px;height:72px;border-radius:8px;background:linear-gradient(90deg,var(--accent-2),var(--accent));display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:18px">${escapeHtml(f.crop.split(' ')[0])}</div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>${escapeHtml(f.name)}</strong><div class="small">${escapeHtml(f.crop)} · ${f.area} ha</div></div>
+            <div class="small">Last irrigated: <div style="font-weight:700">${escapeHtml(f.lastIrrigated)}</div></div>
+          </div>
+          <div style="height:8px"></div>
+          <div class="small-muted">Moisture</div>
+          <div class="progress" aria-hidden="true"><i style="width:${percent}%"></i></div>
+          <div style="height:8px"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="small">Current: <strong>${percent}%</strong></div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" onclick="openFieldDetails('${f.id}')">View details</button>
+              <button class="btn ghost" onclick="simulateIrrigate('${f.id}')">Irrigate</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(el);
+  });
+}
+function openFieldDetails(fieldId){
+  const f = state.fields.find(x => x.id === fieldId);
+  if(!f) return alert('Field not found');
+  $('#modal-root').innerHTML = `<div class="modal-back" role="dialog" aria-modal="true"><div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${escapeHtml(f.name)} — ${escapeHtml(f.crop)}</h3><div class="small">Area: ${f.area} ha</div></div>
+    <div style="height:12px"></div>
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <div class="small-muted">Moisture — last 7 days</div>
+        <canvas id="field-spark" width="520" height="120" style="width:100%;height:120px;margin-top:8px;border-radius:8px"></canvas>
+      </div>
+      <div style="width:260px">
+        <div class="card">
+          <div><strong>Last readings</strong></div>
+          <div style="height:8px"></div>
+          <div class="small">Current moisture: <strong>${f.moistureHistory.slice(-1)[0]}%</strong></div>
+          <div style="height:8px"></div>
+          <div class="small">Last irrigated: <strong>${escapeHtml(f.lastIrrigated)}</strong></div>
+          <div style="height:14px"></div>
+          <div style="display:flex;gap:8px"><button class="btn" id="close-field">Close</button></div>
+        </div>
+      </div>
+    </div>
+  </div></div>`;
+  $('#modal-root .modal-back').addEventListener('click', e => { if(e.target.classList.contains('modal-back')) $('#modal-root').innerHTML = ''; });
+  $('#close-field').addEventListener('click', ()=> $('#modal-root').innerHTML = '');
+  setTimeout(()=> drawSparkline('field-spark', f.moistureHistory), 60);
+}
+function simulateIrrigate(fieldId){
+  const f = state.fields.find(x => x.id === fieldId); if(!f) return;
+  f.lastIrrigated = todayISO();
+  f.moistureHistory = f.moistureHistory.map(v => Math.min(100, Math.round(v + 8)));
+  saveState(); populateFieldsGrid('');
+  alert('Irrigation simulated for ' + f.name);
+}
+function drawSparkline(canvasId, data){
+  const c = document.getElementById(canvasId); if(!c) return;
+  const ctx = c.getContext('2d'); const DPR = window.devicePixelRatio || 1;
+  const W = c.width, H = c.height; c.width = W * DPR; c.height = H * DPR; c.style.width = (W/DPR) + 'px'; c.style.height = (H/DPR) + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W/DPR,H/DPR);
+  const padding = 10; const graphW = (W/DPR) - padding*2, graphH = (H/DPR) - padding*2;
+  const max = Math.max(...data), min = Math.min(...data);
+  const stepX = graphW / (data.length - 1);
+  ctx.beginPath(); ctx.moveTo(padding, padding + graphH - ((data[0]-min)/(max-min||1))*graphH);
+  for(let i=1;i<data.length;i++){ const x = padding + i*stepX; const y = padding + graphH - ((data[i]-min)/(max-min||1))*graphH; ctx.lineTo(x,y); }
+  ctx.lineTo(padding + graphW, padding + graphH); ctx.lineTo(padding, padding + graphH); ctx.closePath();
+  const g = ctx.createLinearGradient(0,padding,0,padding+graphH); g.addColorStop(0, 'rgba(139,207,138,0.24)'); g.addColorStop(1, 'rgba(255,255,255,0.02)'); ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(padding, padding + graphH - ((data[0]-min)/(max-min||1))*graphH);
+  for(let i=1;i<data.length;i++){ const x = padding + i*stepX; const y = padding + graphH - ((data[i]-min)/(max-min||1))*graphH; ctx.lineTo(x,y); }
+  ctx.strokeStyle = 'rgba(11,107,74,0.98)'; ctx.lineWidth = 2; ctx.stroke();
+}
+
+/* ---------- Marketplace ---------- */
+function renderMarket(){
+  const root = $('#view-root');
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="market-heading">
+      <h2 id="market-heading">Crop Marketplace</h2>
+      <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+        <div class="filters">
+          <input id="market-search" type="text" class="input" placeholder="Search products..." aria-label="Search products">
+          <select id="market-category" class="input"><option value="">All categories</option></select>
+          <label class="small" style="margin-left:8px">Max price</label>
+          <input id="market-price" type="range" min="0" max="3000" value="3000" style="width:140px">
+        </div>
+        <div class="small">Favorites: <strong id="fav-count">0</strong></div>
+      </div>
+      <div style="height:12px"></div>
+      <div id="market-grid" class="fields-grid"></div>
+    </section>
+  `;
+  const cats = Array.from(new Set(state.market.map(m => m.category)));
+  const catSel = $('#market-category');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o); });
+  $('#market-search').addEventListener('input', updateMarketGrid);
+  $('#market-category').addEventListener('change', updateMarketGrid);
+  $('#market-price').addEventListener('input', updateMarketGrid);
+  updateMarketGrid(); updateFavCount();
+}
+function updateMarketGrid(){
+  const query = $('#market-search').value.trim().toLowerCase();
+  const cat = $('#market-category').value;
+  const maxPrice = Number($('#market-price').value);
+  const grid = $('#market-grid'); grid.innerHTML = '';
+  const filtered = state.market.filter(p => {
+    const matchesQ = p.name.toLowerCase().includes(query) || (p.description||'').toLowerCase().includes(query);
+    const matchesCat = !cat || p.category === cat;
+    const matchesPrice = (p.price <= maxPrice);
+    return matchesQ && matchesCat && matchesPrice;
+  });
+  filtered.forEach(p => {
+    const isFav = state.favorites && state.favorites.includes(p.id);
+    const card = document.createElement('div'); card.className = 'card card-3d';
+    card.innerHTML = `
+      <div style="display:flex;gap:12px">
+        <div style="width:84px;height:64px;border-radius:8px;background:linear-gradient(90deg,#f0c27b,#4b6cb7);display:flex;align-items:center;justify-content:center;color:white;font-weight:900">${escapeHtml(p.category[0])}</div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>${escapeHtml(p.name)}</strong><div class="small">${escapeHtml(p.seller)}</div></div>
+            <div style="text-align:right"><div style="font-weight:900">₹ ${p.price}</div><div class="small">${escapeHtml(p.category)}</div></div>
+          </div>
+          <div style="height:8px"></div>
+          <div class="small-muted">${escapeHtml(p.description)}</div>
+          <div style="height:8px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" onclick='contactSeller("${p.id}")'>Contact Seller</button>
+            <button class="btn ghost" onclick='toggleFavorite("${p.id}", this)'>${isFav ? "★ Favorited" : "☆ Favorite"}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+function toggleFavorite(productId, btnEl){
+  state.favorites = state.favorites || [];
+  const idx = state.favorites.indexOf(productId);
+  if(idx >= 0) { state.favorites.splice(idx,1); btnEl.textContent = '☆ Favorite'; }
+  else { state.favorites.push(productId); btnEl.textContent = '★ Favorited'; }
+  saveState(); updateFavCount();
+}
+function updateFavCount(){ $('#fav-count').textContent = (state.favorites || []).length; }
+function contactSeller(productId){
+  const p = state.market.find(x => x.id === productId);
+  if(!p) return alert('Product not found');
+  $('#modal-root').innerHTML = `<div class="modal-back" role="dialog" aria-modal="true"><div class="modal">
+    <h3>Contact Seller — ${escapeHtml(p.name)}</h3>
+    <div class="small-muted">Seller: ${escapeHtml(p.seller)}</div>
+    <div style="height:12px"></div>
+    <label class="label">Your name</label><input id="cs-name" class="input" placeholder="Your name">
+    <label class="label">Phone or email</label><input id="cs-contact" class="input" placeholder="Phone or email">
+    <label class="label">Message</label><textarea id="cs-msg" class="input" style="min-height:100px">Hi — I'm interested in ${escapeHtml(p.name)}. Please contact me.</textarea>
+    <div style="height:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="cs-send">Send</button><button class="btn ghost" id="cs-close">Close</button></div>
+  </div></div>`;
+  $('#cs-close').addEventListener('click', ()=> $('#modal-root').innerHTML = '');
+  $('#cs-send').addEventListener('click', ()=> { alert('Message sent (demo) — seller will contact you.'); $('#modal-root').innerHTML = ''; });
+  $('#modal-root .modal-back').addEventListener('click', e => { if(e.target.classList.contains('modal-back')) $('#modal-root').innerHTML = ''; });
+}
+
+/* ---------- Tasks & Calendar ---------- */
+function renderTasks(){
+  const root = $('#view-root');
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="tasks-heading">
+      <h2 id="tasks-heading">Tasks & Calendar</h2>
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:12px;margin-top:12px">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><strong>Tasks</strong><div class="small-muted">Add / remove farm tasks (saved locally)</div></div>
+            <div><button class="btn" id="add-task-btn">+ Add Task</button></div>
+          </div>
+          <div style="height:10px"></div>
+          <div id="tasks-list" class="tasks-list"></div>
+        </div>
+
+        <aside class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center"><div><strong>Calendar</strong><div class="small-muted">Month view highlighting tasks</div></div></div>
+          <div style="height:10px"></div>
+          <div id="calendar" class="calendar"></div>
+        </aside>
+      </div>
+    </section>
+  `;
+  $('#add-task-btn').addEventListener('click', ()=> openAddTaskModal());
+  populateTasksList();
+  renderCalendarView();
+}
+function openAddTaskModal(){
+  $('#modal-root').innerHTML = `<div class="modal-back" role="dialog" aria-modal="true"><div class="modal">
+    <h3>Add Task</h3>
+    <label class="label">Task</label><input id="task-text" class="input" placeholder="Task description">
+    <label class="label">Date</label><input id="task-date" type="date" class="input" value="${todayISO()}">
+    <div style="height:12px"></div>
+    <div style="text-align:right"><button class="btn" id="save-task">Save</button><button class="btn ghost" id="close-task">Close</button></div>
+  </div></div>`;
+  $('#close-task').addEventListener('click', ()=> $('#modal-root').innerHTML = '');
+  $('#save-task').addEventListener('click', ()=> {
+    const t = $('#task-text').value.trim(); const d = $('#task-date').value;
+    if(!t || !d){ alert('Please provide text and date'); return; }
+    const newTask = { id: 't' + Math.random().toString(36).slice(2,9), text: t, date: d };
+    state.tasks = state.tasks || []; state.tasks.push(newTask); saveState(); $('#modal-root').innerHTML = ''; populateTasksList(); renderCalendarView();
+  });
+  $('#modal-root .modal-back').addEventListener('click', e => { if(e.target.classList.contains('modal-back')) $('#modal-root').innerHTML = ''; });
+}
+function populateTasksList(){
+  const root = $('#tasks-list'); root.innerHTML = '';
+  (state.tasks || []).forEach(task => {
+    const el = document.createElement('div'); el.className = 'task';
+    el.innerHTML = `<div><div style="font-weight:800">${escapeHtml(task.text)}</div><div class="small-muted">${escapeHtml(task.date)}</div></div><div style="display:flex;gap:8px"><button class="btn ghost" onclick='deleteTask("${task.id}")'>Remove</button></div>`;
+    root.appendChild(el);
+  });
+}
+function deleteTask(id){ if(!confirm('Delete task?')) return; state.tasks = state.tasks.filter(t => t.id !== id); saveState(); populateTasksList(); renderCalendarView(); }
+function renderCalendarView(){
+  const calendar = $('#calendar'); calendar.innerHTML = '';
+  const now = new Date(); const year = now.getFullYear(), month = now.getMonth();
+  const first = new Date(year, month, 1).getDay(); const daysInMonth = new Date(year, month+1, 0).getDate();
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(h => { const el = document.createElement('div'); el.className='day'; el.style.fontWeight='700'; el.style.textAlign='center'; el.textContent = h; calendar.appendChild(el); });
+  for(let i=0;i<first;i++){ const d = document.createElement('div'); d.className='day'; calendar.appendChild(d); }
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = new Date(year, month, d).toISOString().slice(0,10);
+    const dayEl = document.createElement('div'); dayEl.className = 'day'; dayEl.innerHTML = `<div class="date">${d}</div>`;
+    const tasks = (state.tasks || []).filter(t => t.date === dateStr);
+    if(tasks.length) { dayEl.classList.add('has'); tasks.forEach(t => { const pill = document.createElement('div'); pill.style.marginTop='20px'; pill.style.padding='6px'; pill.style.borderRadius='6px'; pill.style.background='linear-gradient(90deg,var(--accent-2),var(--accent))'; pill.style.color='white'; pill.style.fontSize='12px'; pill.textContent = t.text; dayEl.appendChild(pill); }); }
+    calendar.appendChild(dayEl);
+  }
+}
+
+/* ---------- Resources ---------- */
+function renderResources(){
+  const root = $('#view-root');
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="resources-heading">
+      <h2 id="resources-heading">Resources & Guides</h2>
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:12px;margin-top:12px">
+        <div><div id="resources-list" class="resources-list"></div></div>
+        <aside class="card"><div><strong>Reading Panel</strong><div class="small-muted">Click an article to read</div></div><div id="article-panel" style="margin-top:12px" class="small-muted">Select an article</div></aside>
+      </div>
+    </section>
+  `;
+  const list = $('#resources-list'); list.innerHTML = '';
+  state.articles.forEach(a => {
+    const el = document.createElement('div'); el.className = 'article card-3d';
+    el.innerHTML = `<div style="width:84px;height:72px;border-radius:8px;background:linear-gradient(90deg,#fef6c8,#fbc2eb);display:flex;align-items:center;justify-content:center;font-weight:800">${escapeHtml(a.title.split(' ')[0])}</div>
+      <div style="flex:1"><div style="display:flex;justify-content:space-between"><strong>${escapeHtml(a.title)}</strong><div class="small-muted">${escapeHtml(a.id)}</div></div><div class="small-muted">${escapeHtml(a.summary)}</div><div style="height:8px"></div><div><button class="btn" onclick='openArticle("${a.id}")'>Read</button></div></div>`;
+    list.appendChild(el);
+  });
+}
+function openArticle(articleId){
+  const a = state.articles.find(x => x.id === articleId); if(!a) return;
+  $('#article-panel').innerHTML = `<h3>${escapeHtml(a.title)}</h3><div style="height:8px"></div><div class="small-muted">${escapeHtml(a.summary)}</div><div style="height:12px"></div><div>${escapeHtml(a.content)}</div>`;
+}
+
+/* ---------- Contact & Profile (fixed) ---------- */
+function renderContact(){
+  const root = $('#view-root');
+  const prof = state.profile || {};
+  root.innerHTML = `
+    <section class="card card-3d" aria-labelledby="contact-heading">
+      <h2 id="contact-heading">Contact & Farm Profile</h2>
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:12px;margin-top:12px">
+        <div class="card">
+          <h3>Contact Form</h3>
+          <label class="label">Name</label><input id="contact-name" class="input" aria-label="Your name">
+          <label class="label">Phone / Email</label><input id="contact-phone" class="input" aria-label="Your contact">
+          <label class="label">Message</label><textarea id="contact-message" class="input" style="min-height:120px" aria-label="Your message"></textarea>
+          <div style="height:8px"></div>
+          <div style="text-align:right"><button class="btn" id="contact-send">Send</button></div>
+          <div id="contact-feedback" class="small-muted" style="margin-top:8px"></div>
+
+          <div style="height:12px"></div>
+          <div><strong>Recent Messages</strong><div class="small-muted">Saved locally in your browser</div></div>
+          <div id="recent-messages" style="margin-top:8px"></div>
+        </div>
+
+        <aside class="card card-3d">
+          <h3>Farm Profile</h3>
+          <label class="label">Owner</label><input id="profile-owner" class="input" value="${escapeHtml(prof.owner||'')}">
+          <label class="label">Farm name</label><input id="profile-name" class="input" value="${escapeHtml(prof.farmName||'')}">
+          <label class="label">Location</label><input id="profile-location" class="input" value="${escapeHtml(prof.location||'')}">
+          <label class="label">Area (ha)</label><input id="profile-area" class="input" value="${escapeHtml(prof.areaHa||'')}">
+          <label class="label">Phone</label><input id="profile-phone" class="input" value="${escapeHtml(prof.phone||'')}">
+          <div style="height:8px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="save-profile">Save</button><button class="btn ghost" id="reset-profile">Reset</button></div>
+          <div id="profile-feedback" class="small-muted" style="margin-top:8px"></div>
+        </aside>
+      </div>
+    </section>
+  `;
+  $('#contact-send').addEventListener('click', handleContactSend);
+  renderRecentMessages();
+
+  $('#save-profile').addEventListener('click', ()=> {
+    const owner = $('#profile-owner').value.trim();
+    const farmName = $('#profile-name').value.trim();
+    const location = $('#profile-location').value.trim();
+    const areaHa = parseFloat($('#profile-area').value || '0');
+    const phone = $('#profile-phone').value.trim();
+    if(!owner || !farmName){ $('#profile-feedback').textContent = 'Owner and farm name required.'; return; }
+    state.profile = { owner, farmName, location, areaHa, phone };
+    saveState();
+    $('#profile-feedback').textContent = 'Profile saved.';
+    setTimeout(()=> $('#profile-feedback').textContent = '', 2600);
+  });
+  $('#reset-profile').addEventListener('click', ()=> { if(!confirm('Reset profile to seed?')) return; state.profile = createSeedData().profile; saveState(); renderContact(); });
+}
+function handleContactSend(){
+  const name = $('#contact-name').value.trim();
+  const contact = $('#contact-phone').value.trim();
+  const msg = $('#contact-message').value.trim();
+  if(!name || !contact || !msg){
+    $('#contact-feedback').textContent = 'Please fill name, contact and message.';
+    return;
+  }
+  const message = { id: 'm' + Math.random().toString(36).slice(2,9), name, contact, message: msg, ts: new Date().toISOString() };
+  state.messages = state.messages || [];
+  state.messages.unshift(message);
+  if(state.messages.length > 50) state.messages = state.messages.slice(0,50);
+  saveState();
+  $('#contact-name').value=''; $('#contact-phone').value=''; $('#contact-message').value='';
+  $('#contact-feedback').textContent = 'Message saved locally. Thank you!';
+  showToast('Message sent ✓');
+  renderRecentMessages();
+  setTimeout(()=> { if($('#contact-feedback')) $('#contact-feedback').textContent = ''; }, 3200);
+}
+function renderRecentMessages(){
+  const root = $('#recent-messages'); if(!root) return;
+  const msgs = state.messages || [];
+  if(msgs.length === 0){ root.innerHTML = '<div class="small-muted">No messages yet.</div>'; return; }
+  root.innerHTML = '';
+  msgs.slice(0,10).forEach(m => {
+    const el = document.createElement('div'); el.className = 'card'; el.style.marginBottom = '8px';
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div><strong>${escapeHtml(m.name)}</strong><div class="small-muted">${escapeHtml(m.contact)}</div></div><div class="small-muted">${(new Date(m.ts)).toLocaleString()}</div></div><div style="height:8px"></div><div>${escapeHtml(m.message)}</div>`;
+    root.appendChild(el);
+  });
+}
+
+/* ---------- misc helpers ---------- */
+function exportTasksAsJSON(){
+  const data = (state.tasks || []);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'agrihub_tasks.json'; a.click(); URL.revokeObjectURL(url);
+}
+function showToast(text){
+  const t = $('#toast'); t.style.display = 'block'; t.querySelector('div').textContent = text; t.style.opacity = 1;
+  setTimeout(()=> { t.style.opacity = 0; setTimeout(()=> t.style.display = 'none', 280); }, 2200);
+}
+function setMiniWeather(){
+  const seed = new Date().getDate(); const rng = makeRNG(seed);
+  const temp = Math.round(18 + rng()*14);
+  const cond = rng() > 0.6 ? 'Sunny' : (rng() > 0.4 ? 'Cloudy' : 'Rainy');
+  $('#mini-weather-temp').textContent = `${temp}°C`;
+  $('#mini-weather-desc').textContent = cond;
+  const icon = cond === 'Sunny' ? '☀️' : (cond === 'Cloudy' ? '☁️' : '🌧️');
+  $('#mini-weather-icon').textContent = icon;
+}
+
+/* ---------- small global hooks ---------- */
+window.openFieldDetails = openFieldDetails;
+window.contactSeller = contactSeller;
+window.toggleFavorite = toggleFavorite;
+window.deleteTask = deleteTask;
+function navigateTo(path){ location.hash = path; }
+
+/* initial render */
+renderRoute();
+</script>
+</body>
+</html>
